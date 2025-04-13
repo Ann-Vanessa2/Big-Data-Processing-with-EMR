@@ -1,0 +1,130 @@
+{
+  "Comment": "EMR + Spark + Glue + Athena Pipeline",
+  "StartAt": "Add Spark Step 1",
+  "States": {
+    "Add Spark Step 1": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::elasticmapreduce:addStep.sync",
+      "Parameters": {
+        "ClusterId": "j-2Q71FKK6EV14P",
+        "Step": {
+          "Name": "Run Spark Job 1",
+          "ActionOnFailure": "TERMINATE_CLUSTER",
+          "HadoopJarStep": {
+            "Jar": "command-runner.jar",
+            "Args": [
+              "spark-submit",
+              "--deploy-mode",
+              "cluster",
+              "s3://car-rental-marketplace/spark-jobs/spark_job_1.py"
+            ]
+          }
+        }
+      },
+      "Next": "Add Spark Step 2"
+    },
+    "Add Spark Step 2": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::elasticmapreduce:addStep.sync",
+      "Parameters": {
+        "ClusterId": "j-2Q71FKK6EV14P",
+        "Step": {
+          "Name": "Run Spark Job 2",
+          "ActionOnFailure": "TERMINATE_CLUSTER",
+          "HadoopJarStep": {
+            "Jar": "command-runner.jar",
+            "Args": [
+              "spark-submit",
+              "--deploy-mode",
+              "cluster",
+              "s3://car-rental-marketplace/spark-jobs/spark_job_2.py"
+            ]
+          }
+        }
+      },
+      "Next": "Run Glue Crawler"
+    },
+    "Run Glue Crawler": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Parameters": {
+        "Name": "CarRentalProcessedCrawler"
+      },
+      "Next": "Wait For Crawler"
+    },
+    "Wait For Crawler": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "Check Crawler Status"
+    },
+    "Check Crawler Status": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getCrawler",
+      "Parameters": {
+        "Name": "CarRentalProcessedCrawler"
+      },
+      "Next": "Crawler Complete?"
+    },
+    "Crawler Complete?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.Crawler.State",
+          "StringEquals": "READY",
+          "Next": "Run Athena Query 1"
+        }
+      ],
+      "Default": "Wait For Crawler"
+    },
+    "Run Athena Query 1": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "SELECT pickup_location, total_revenue FROM location_metrics ORDER BY total_revenue DESC LIMIT 1;",
+        "QueryExecutionContext": {
+          "Database": "car_rental_analytics"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://car-rental-marketplace/athena/results/"
+        }
+      },
+      "Next": "Run Athena Query 2"
+    },
+    "Run Athena Query 2": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "SELECT vehicle_type, COUNT(*) AS total_rentals FROM rental_duration_metrics GROUP BY vehicle_type ORDER BY total_rentals DESC LIMIT 1;",
+        "QueryExecutionContext": {
+          "Database": "car_rental_analytics"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://car-rental-marketplace/athena/results/"
+        }
+      },
+      "Next": "Run Athena Query 3"
+    },
+    "Run Athena Query 3": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+      "Parameters": {
+        "QueryString": "SELECT user_id, total_revenue AS total_spent FROM user_metrics ORDER BY total_spent DESC LIMIT 10;",
+        "QueryExecutionContext": {
+          "Database": "car_rental_analytics"
+        },
+        "ResultConfiguration": {
+          "OutputLocation": "s3://car-rental-marketplace/athena/results/"
+        }
+      },
+      "Next": "Terminate EMR Cluster"
+    },
+    "Terminate EMR Cluster": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::elasticmapreduce:terminateCluster.sync",
+      "Parameters": {
+        "ClusterId": "j-2Q71FKK6EV14P"
+      },
+      "End": true
+    }
+  }
+}
