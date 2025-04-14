@@ -8,7 +8,7 @@ This project implements a batch data processing pipeline for a car rental market
 ## Architecture Summary
 
 ### AWS Services Used:
-- **Amazon S3**: Data lake for input, intermediate, and output data.
+- **Amazon S3**: Storage for input and output data.
 - **AWS EMR (Spark)**: Executes two Spark jobs for data transformation and metric computation.
 - **AWS Glue Crawler**: Crawls processed data and updates the AWS Glue Data Catalog.
 - **Amazon Athena**: Runs analytical queries to extract business insights.
@@ -21,10 +21,6 @@ This project implements a batch data processing pipeline for a car rental market
 
 ## Workflow Execution (Step Function)
 
-### Option A: Automated Cluster Launch
-The Step Function creates and terminates the EMR cluster as part of the flow.
-
-### Option B: Manual EMR Cluster
 User manually creates the EMR cluster and provides the **Cluster ID** to the Step Function. The workflow then:
 1. Adds Spark steps to the cluster
 2. Triggers the Glue crawler
